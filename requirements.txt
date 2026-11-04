@@ -1,0 +1,10 @@
+# Exact versions this repo was validated with (Python 3.12).
+# gwpy is pinned below 3.0.9: newer gwpy releases break `import pygwb` 1.5.1
+# (TypeError in pygwb/omega_spectra.py when concatenating _print_slots).
+numpy==2.2.6
+scipy==1.13.1
+matplotlib==3.9.4  # 3.10+ breaks gwpy 3.0.8 axes
+bilby==2.8.2
+gwpy==3.0.8
+pygwb==1.5.1
+pytest==9.2.0
