@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from sgwb_snr.networks import NETWORKS, network_baselines
+from sgwb_snr.networks import ET_DESIGNS, NETWORKS, network_baselines
 from sgwb_snr.pi_curve import pi_curve, power_law_amplitudes
 from sgwb_snr.snr import hubble_constant_si, omega_eff, snr
 
@@ -21,7 +21,10 @@ def network(request):
 
 
 def test_network_baseline_counts():
-    for name, count in [("CE4020", 1), ("ET", 3), ("CE4020ET", 10)]:
+    for name, count in [
+        ("CE4020", 1), ("ET", 3), ("CE4020ET", 10),
+        ("ET-tri10", 3), ("ET-2L0", 1), ("CE4020+ET-tri10", 10), ("CE4020+ET-2L45", 6),
+    ]:
         assert len(network_baselines(name, FREQS_HZ[:10])) == count
 
 
@@ -60,3 +63,16 @@ def test_scales_with_threshold_and_time(network):
     base = power_law_amplitudes(FREQS_HZ, omega_eff_values, BETAS, F_REF_HZ, YEAR_S, 1.0)
     scaled = power_law_amplitudes(FREQS_HZ, omega_eff_values, BETAS, F_REF_HZ, 4.0 * YEAR_S, 3.0)
     np.testing.assert_allclose(scaled, 1.5 * base, rtol=1e-12)
+
+
+def test_et_design_comparison_matches_branchesi():
+    # Branchesi et al. (arXiv:2303.15923) Sec. 8.1.1: for stochastic backgrounds the
+    # parallel 2L is best below about 100 Hz and the triangle above; the 2L at 45 deg
+    # is worse than the parallel 2L below 200-300 Hz and comparable above.
+    eff = {design: omega_eff(FREQS_HZ, network_baselines(design, FREQS_HZ), H0_PER_S) for design in ET_DESIGNS}
+    crossover_hz = FREQS_HZ[np.argmax(eff["ET-2L0"] > eff["ET-tri10"])]
+    assert np.all(eff["ET-2L0"][FREQS_HZ < crossover_hz] < eff["ET-tri10"][FREQS_HZ < crossover_hz])
+    assert 70.0 < crossover_hz < 150.0
+    at_hz = lambda design, f_hz: eff[design][np.argmin(np.abs(FREQS_HZ - f_hz))]
+    assert at_hz("ET-2L45", 20.0) > 5.0 * at_hz("ET-2L0", 20.0)
+    assert at_hz("ET-2L45", 300.0) < 2.0 * at_hz("ET-2L0", 300.0)

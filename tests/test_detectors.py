@@ -5,7 +5,13 @@ import itertools
 import numpy as np
 import pytest
 
-from sgwb_snr.detectors import cosmic_explorer, einstein_telescope
+from sgwb_snr.detectors import (
+    _ET_2L_SITES,
+    cosmic_explorer,
+    einstein_telescope,
+    einstein_telescope_2l,
+    great_circle_azimuth_deg,
+)
 from sgwb_snr.orf import tensor_orf
 
 BAND_HZ = (5.0, 512.0)  # analysis band of arXiv:2502.12828
@@ -84,3 +90,38 @@ def test_et_null_stream(et, ce40, ce20):
     for other in (ce40, ce20):
         total = sum(tensor_orf(ifo, other, LOW_FREQ_HZ)[0] for ifo in et)
         assert total == pytest.approx(0.0, abs=0.005)
+
+
+def _two_l_orf(relative_angle_deg, frequencies_hz):
+    return tensor_orf(*einstein_telescope_2l(relative_angle_deg, 15.0, *BAND_HZ), frequencies_hz)
+
+
+@pytest.fixture(scope="module")
+def parallel_angle_deg():
+    # Arms parallel with respect to the great circle joining the sites: the angle
+    # of each x-arm from the great-circle direction (Sardinia -> Meuse-Rhine,
+    # continued past Meuse-Rhine) must be equal.
+    s, m = _ET_2L_SITES["Sardinia"], _ET_2L_SITES["Meuse-Rhine"]
+    outbound_deg = great_circle_azimuth_deg(s["latitude_deg"], s["longitude_deg"], m["latitude_deg"], m["longitude_deg"])
+    inbound_deg = great_circle_azimuth_deg(m["latitude_deg"], m["longitude_deg"], s["latitude_deg"], s["longitude_deg"])
+    return (inbound_deg + 180.0 - outbound_deg) % 180.0
+
+
+def test_two_l_parallel_angle_matches_branchesi(parallel_angle_deg):
+    # Branchesi et al. Sec. 2: alpha = beta + 2.51 deg.
+    assert parallel_angle_deg == pytest.approx(2.51, abs=0.005)
+
+
+def test_two_l_orf_peaks_at_great_circle_parallel(parallel_angle_deg):
+    # In the long-wavelength limit gamma is largest for great-circle-parallel arms.
+    # Rotating the Meuse-Rhine L the wrong way would put the peak at -2.51 deg.
+    alphas_deg = np.arange(-10.0, 10.0 + 1e-9, 0.01)
+    gammas = [_two_l_orf(alpha, LOW_FREQ_HZ)[0] for alpha in alphas_deg]
+    assert alphas_deg[np.argmax(gammas)] == pytest.approx(parallel_angle_deg, abs=0.015)
+
+
+def test_two_l_orf_vanishes_45_degrees_from_parallel(parallel_angle_deg):
+    # Branchesi et al. Sec. 2: at beta = 45 deg gamma -> 0 as f * dx -> 0
+    # (f dx / c = 4e-4 at 0.1 Hz); alpha = 45 deg keeps a small residual.
+    assert abs(_two_l_orf(parallel_angle_deg + 45.0, LOW_FREQ_HZ)[0]) < 1e-3
+    assert 0.05 < _two_l_orf(45.0, LOW_FREQ_HZ)[0] < 0.15

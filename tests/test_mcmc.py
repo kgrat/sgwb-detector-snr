@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from sgwb_snr.fisher import amplitude_covariance, fisher_matrix, string_tension_uncertainty
-from sgwb_snr.mcmc import AmplitudePosterior, relative_uncertainty, sample, threshold_from_scan
+from sgwb_snr.mcmc import AmplitudePosterior, error_versus_truth, relative_uncertainty, sample, threshold_from_scan
 from sgwb_snr.networks import network_baselines
 from sgwb_snr.snr import hubble_constant_si
 from sgwb_snr.spectra import FOREGROUNDS, REFERENCE_FREQUENCY_HZ, omega_cosmic_strings
@@ -34,6 +34,28 @@ def test_interpolated_template_matches_direct_evaluation(covariance):
 def test_prior_bounds_give_zero_probability(covariance):
     posterior = AmplitudePosterior(np.ones(3), covariance, 1.0 / 3.0, 1.0, PARAMS, PRIOR_LOG10)
     assert np.all(np.isneginf(posterior(np.array([[-19.0, -10.0, -12.0], [-12.0, -7.0, -12.0]]))))
+
+
+def test_two_component_likelihood_is_the_gaussian_quadratic_form(covariance):
+    # Data case 2 model (CS + CBC): log L = -1/2 r^T Sigma^-1 r with r = model - Omega_hat.
+    two = covariance[:2, :2]
+    omega_hat = np.array([1e-11, 7e-10])
+    theta = np.array([-12.0, np.log10(6e-10)])
+    posterior = AmplitudePosterior(omega_hat, two, 1.0 / 3.0, 1.0, PARAMS, PRIOR_LOG10)
+    residual = np.array([omega_cosmic_strings(F_STAR, 1e-12, 1.0 / 3.0, 1.0, PARAMS)[0], 6e-10]) - omega_hat
+    expected = -0.5 * residual @ np.linalg.inv(two) @ residual
+    assert posterior(theta)[0] == pytest.approx(expected, rel=1e-5)
+
+
+def test_error_versus_truth_limits():
+    rng = np.random.default_rng(0)
+    # Unbiased, median exactly at the truth: reduces to halfwidth / truth.
+    samples = np.log10(1e-13) + 0.1 * rng.standard_normal(200001)
+    tension = 10.0**samples
+    p16, p84 = np.percentile(tension, [16.0, 84.0])
+    assert error_versus_truth(samples, 1e-13) == pytest.approx(0.5 * (p84 - p16) / 1e-13, rel=1e-3)
+    # Point mass at twice the truth: pure bias, error = 1.
+    assert error_versus_truth(np.full(10, np.log10(2e-13)), 1e-13) == pytest.approx(1.0)
 
 
 def test_gaussian_limit_reproduces_fisher(covariance):

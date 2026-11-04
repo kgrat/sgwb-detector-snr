@@ -10,6 +10,9 @@ Conventions (Table II caption):
   counter-clockwise from its x-arm (x-arm due north, y-arm north-west).
 Table II gives no elevation; we use 0 m for every vertex.
 
+The alternative "2L" ET design (two L-shaped detectors, Sardinia and
+Meuse-Rhine) follows Branchesi et al. (arXiv:2303.15923), Sec. 2 and App. B.
+
 bilby is used only as a container for vertex and arm unit vectors. Its
 built-in CE/ET files are not used (wrong sites), and neither is
 bilby.gw.detector.TriangularInterferometer: it places the ET vertices
@@ -94,6 +97,59 @@ def einstein_telescope(minimum_frequency_hz, maximum_frequency_hz):
             latitude_deg, longitude_deg, x_arm_azimuth_deg, ET_ARM_LENGTH_KM * 1e3
         )
     return interferometers
+
+
+# Branchesi et al. Sec. 2, footnote 3. Angles in degrees.
+_ET_2L_SITES = {
+    "Sardinia": {"latitude_deg": 40.0 + 31.0 / 60.0, "longitude_deg": 9.0 + 25.0 / 60.0},
+    "Meuse-Rhine": {
+        "latitude_deg": 50.0 + 43.0 / 60.0 + 23.0 / 3600.0,
+        "longitude_deg": 5.0 + 55.0 / 60.0 + 14.0 / 3600.0,
+    },
+}
+
+
+def einstein_telescope_2l(relative_angle_deg, arm_length_km, minimum_frequency_hz, maximum_frequency_hz):
+    """The two L-shaped detectors of the ET 2L design (Branchesi et al. App. B).
+
+    The Sardinia arms point locally east (x) and north (y). The Meuse-Rhine
+    arms are rotated counter-clockwise by relative_angle_deg (their alpha) from
+    local east/north. Branchesi et al. use alpha = 0 ("parallel") and 45 deg;
+    because of the Earth's curvature the truly parallel and maximally
+    misaligned orientations are alpha = 2.51 and 47.51 deg.
+    """
+    detectors = []
+    for site, x_arm_azimuth_deg in (("Sardinia", 0.0), ("Meuse-Rhine", relative_angle_deg)):
+        geometry = _ET_2L_SITES[site]
+        detectors.append(
+            Interferometer(
+                name=f"ET2L{site[0]}",
+                power_spectral_density=None,
+                minimum_frequency=minimum_frequency_hz,
+                maximum_frequency=maximum_frequency_hz,
+                length=arm_length_km,
+                latitude=geometry["latitude_deg"],
+                longitude=geometry["longitude_deg"],
+                elevation=ELEVATION_M,
+                xarm_azimuth=x_arm_azimuth_deg % 360.0,
+                yarm_azimuth=(x_arm_azimuth_deg + 90.0) % 360.0,
+            )
+        )
+    return detectors
+
+
+def great_circle_azimuth_deg(latitude_1_deg, longitude_1_deg, latitude_2_deg, longitude_2_deg):
+    """Azimuth (counter-clockwise from local east) at point 1 of the great circle to point 2.
+
+    Standard initial-bearing formula; bearing (clockwise from north) = 90 deg - azimuth.
+    """
+    phi_1, phi_2 = np.radians(latitude_1_deg), np.radians(latitude_2_deg)
+    delta_lambda = np.radians(longitude_2_deg - longitude_1_deg)
+    bearing_rad = np.arctan2(
+        np.sin(delta_lambda) * np.cos(phi_2),
+        np.cos(phi_1) * np.sin(phi_2) - np.sin(phi_1) * np.cos(phi_2) * np.cos(delta_lambda),
+    )
+    return 90.0 - np.degrees(bearing_rad)
 
 
 def _great_circle_step(latitude_deg, longitude_deg, azimuth_deg, distance_m):

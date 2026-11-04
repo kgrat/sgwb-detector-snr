@@ -1,8 +1,9 @@
 """Posterior on G mu from the separated amplitudes (arXiv:2502.12828 Eq. 37).
 
-Parameters theta = (log10 G mu, log10 Omega_CBC, log10 Omega_CBHE) with
-log-uniform priors (the paper uses [-18, -8] for all three). The model vector is
-(Omega_CS(f*; G mu), Omega_CBC, Omega_CBHE) and the likelihood is Gaussian,
+Parameters theta = (log10 G mu, log10 Omega_1, ...) for the cosmic strings and
+the modelled foregrounds (CBC and CBHE in data case 3, CBC only in data case 2),
+with log-uniform priors (the paper uses [-18, -8] for all). The model vector is
+(Omega_CS(f*; G mu), Omega_1, ...) and the likelihood is Gaussian,
 
     log L = -1/2 (Omega(theta) - Omega_hat)^T Sigma^-1 (Omega(theta) - Omega_hat),
 
@@ -26,7 +27,9 @@ class AmplitudePosterior:
     def __init__(self, omega_hat, covariance, equation_of_state, reheating_temperature_gev, params, prior_bounds_log10):
         self.omega_hat = np.asarray(omega_hat, dtype=float)
         covariance = np.asarray(covariance, dtype=float)
-        assert self.omega_hat.shape == (3,) and covariance.shape == (3, 3)
+        n_components = self.omega_hat.size
+        assert self.omega_hat.shape == (n_components,) and n_components >= 2
+        assert covariance.shape == (n_components, n_components)
         self.inverse_covariance = np.linalg.inv(covariance)
         low, high = prior_bounds_log10
         if not low < high:
@@ -44,10 +47,11 @@ class AmplitudePosterior:
         return 10.0 ** np.interp(log10_tension, self.grid_log10_tension, self.grid_log10_omega)
 
     def __call__(self, thetas):
-        """Vectorized over walkers: thetas has shape (n_walkers, 3)."""
+        """Vectorized over walkers: thetas has shape (n_walkers, n_components)."""
         thetas = np.atleast_2d(thetas)
+        assert thetas.shape[1] == self.omega_hat.size
         inside = np.all((thetas >= self.bounds[0]) & (thetas <= self.bounds[1]), axis=1)
-        model = np.column_stack([self.omega_cs(thetas[:, 0]), 10.0 ** thetas[:, 1], 10.0 ** thetas[:, 2]])
+        model = np.column_stack([self.omega_cs(thetas[:, 0]), 10.0 ** thetas[:, 1:]])
         residual = model - self.omega_hat
         log_likelihood = -0.5 * np.einsum("wi,ij,wj->w", residual, self.inverse_covariance, residual)
         return np.where(inside, log_likelihood, -np.inf)
@@ -58,7 +62,7 @@ class NotConverged(RuntimeError):
 
 
 def sample(posterior, start_theta, n_walkers, max_steps, seed, check_every=5000):
-    """emcee samples of theta after burn-in, shape (n_samples, 3).
+    """emcee samples of theta after burn-in, shape (n_samples, n_components).
 
     Runs in chunks of check_every steps until the chain is longer than 50
     integrated autocorrelation times tau and tau changed by < 1% since the last
@@ -66,10 +70,11 @@ def sample(posterior, start_theta, n_walkers, max_steps, seed, check_every=5000)
     as burn-in. Raises NotConverged if that does not happen within max_steps.
     """
     start_theta = np.asarray(start_theta, dtype=float)
-    assert start_theta.shape == (3,)
+    assert start_theta.shape == posterior.omega_hat.shape
+    n_components = start_theta.size
     rng = np.random.default_rng(seed)
-    state = start_theta + 1e-3 * rng.standard_normal((n_walkers, 3))
-    sampler = emcee.EnsembleSampler(n_walkers, 3, posterior, vectorize=True)
+    state = start_theta + 1e-3 * rng.standard_normal((n_walkers, n_components))
+    sampler = emcee.EnsembleSampler(n_walkers, n_components, posterior, vectorize=True)
     sampler.random_state = np.random.RandomState(seed).get_state()  # reproducible chains
     previous_tau = np.inf
     while sampler.iteration < max_steps:
@@ -86,6 +91,19 @@ def relative_uncertainty(log10_tension_samples):
     tension = 10.0 ** np.asarray(log10_tension_samples)
     p16, p50, p84 = np.percentile(tension, [16.0, 50.0, 84.0])
     return 0.5 * (p84 - p16) / p50
+
+
+def error_versus_truth(log10_tension_samples, true_tension):
+    """sqrt((median - truth)^2 + halfwidth^2) / truth, halfwidth = (p84 - p16) / 2.
+
+    Total error of the G mu estimate with respect to the injected value; unlike
+    relative_uncertainty it penalizes a biased estimate (data case 2).
+    """
+    if not true_tension > 0:
+        raise ValueError("true_tension must be positive")
+    tension = 10.0 ** np.asarray(log10_tension_samples)
+    p16, p50, p84 = np.percentile(tension, [16.0, 50.0, 84.0])
+    return np.hypot(p50 - true_tension, 0.5 * (p84 - p16)) / true_tension
 
 
 def threshold_from_scan(string_tensions, uncertainties, target):

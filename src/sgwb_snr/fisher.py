@@ -15,6 +15,14 @@ the foregrounds.
 Delta(G mu) / (G mu) follows by linear error propagation through
 Omega_CS(f*; G mu), which is what the paper's MCMC (Eq. 37) estimates when the
 posterior is close to Gaussian.
+
+If a component present in the data is left out of the model (the paper's data
+case 2), the maximum-likelihood estimate (paper Eq. 26, Omega_hat = Gamma^-1 X)
+of the modelled amplitudes m is shifted by the unmodelled amplitudes u:
+
+    <Omega_hat_m> = Omega_m + (F_mm)^-1 F_mu Omega_u,
+
+since X = K_m^dagger N^-1 (K_m Omega_m + K_u Omega_u) on average.
 """
 
 import numpy as np
@@ -54,6 +62,20 @@ def amplitude_covariance(fisher):
     covariance = np.linalg.inv(correlation) * scale[:, None] * scale[None, :]
     np.linalg.cholesky(covariance)  # raises unless positive definite
     return covariance
+
+
+def unmodelled_bias(fisher, n_modelled, unmodelled_amplitudes):
+    """Shift (F_mm)^-1 F_mu Omega_u of the first n_modelled amplitudes when the
+    remaining components, with true amplitudes unmodelled_amplitudes, are not modelled."""
+    fisher = np.asarray(fisher, dtype=float)
+    unmodelled_amplitudes = np.asarray(unmodelled_amplitudes, dtype=float)
+    assert fisher.ndim == 2 and fisher.shape[0] == fisher.shape[1]
+    assert 0 < n_modelled < fisher.shape[0]
+    assert unmodelled_amplitudes.shape == (fisher.shape[0] - n_modelled,)
+    modelled_covariance = amplitude_covariance(fisher[:n_modelled, :n_modelled])
+    bias = modelled_covariance @ fisher[:n_modelled, n_modelled:] @ unmodelled_amplitudes
+    assert bias.shape == (n_modelled,)
+    return bias
 
 
 def _log_slope(string_tension, equation_of_state, reheating_temperature_gev, params):

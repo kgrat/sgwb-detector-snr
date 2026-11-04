@@ -4,6 +4,9 @@ Python tools for computing the detectability (signal-to-noise ratio) of stochast
 gravitational-wave backgrounds (SGWB) across ground-based detector networks:
 LIGO, Einstein Telescope (ET), and Cosmic Explorer (CE).
 
+Developed with Claude Code (Anthropic) as a coding assistant; all physical
+choices, conventions and validations were reviewed and decided by me.
+
 ## Current goal
 
 Reproduce and extend Wang, Jin & Zhang, *Detecting SGWB from cosmic strings with
@@ -23,6 +26,9 @@ foregrounds.
 | 5 | Power-law integrated curves (Thrane & Romano 2013) | Flat spectrum on the PI curve gives SNR = 1; paper Fig. 1, right panel (CE4020 within 0.84-1.10; ET differs) | Done |
 | 6 | Cosmic-string, CBC, and hyperbolic-encounter spectra | Omega_CS proportional to sqrt(G mu) on the plateau; Figs. 2-3 (within 6%) | Done |
 | 7 | Fisher component separation, cross-checked by MCMC with the paper's priors | Gaussian limit of the MCMC equals Fisher; Table I, w = 1/3 row (MCMC: ET 1.3x, CE4020 1.4x, CE4020ET 2.2x the paper's G mu) | Done |
+| 8 | Data case 2: CBHE in the data but not in the model | Unmodelled copy of a modelled shape is absorbed exactly; paper Sec. V trend (weak for CE4020, strong for ET and CE4020ET) | Done |
+| 9 | Extension: ET triangle vs 2L (Branchesi et al., arXiv:2303.15923) | Parallel-arm angle 2.51 deg and gamma(f -> 0) = 0 at 47.51 deg; 2L-0 beats the triangle below ~100 Hz (we find 115 Hz) | Done |
+| 10 | Extension: correlated Newtonian noise in the ET triangle (Caporali et al., arXiv:2501.09057) | Uncorrelated limit equals the paper's Fisher matrix; Isserlis covariance; sign of the bias | Done (Fisher) |
 
 ## Setup
 
@@ -37,6 +43,9 @@ foregrounds.
     python scripts/plot_spectra.py
     python scripts/table1.py
     python scripts/table1_mcmc.py   # ~1 h on one core
+    python scripts/table1_case2.py  # ~1 h; one w per process: table1_case2.py 1/3
+    python scripts/et_designs.py
+    python scripts/correlated_noise.py
 
 Versions are pinned exactly. gwpy and matplotlib are pinned below their latest
 releases because newer versions break pygwb 1.5.1 (see comments in requirements.txt).
@@ -57,6 +66,10 @@ This only downgrades that one diagnostic to a warning; no pinned version changes
 - Next-generation detectors are never taken from bilby's built-in files: bilby's
   CE detector sits at the Hanford site. They are defined explicitly from the
   published configurations.
+- CE and ET geometry from Gupta et al. (arXiv:2307.10421), Table II: latitude,
+  longitude and x-arm azimuth measured counter-clockwise from local east; the
+  y-arm is 90 deg (CE) or 60 deg (ET) further counter-clockwise; elevation 0 m
+  (not given in the table).
 - Detectors with non-90-degree arms (the three 60-degree ET interferometers) get
   the factor sin(beta_1) sin(beta_2) on top of pygwb's ORF, which assumes
   L-shaped detectors. Two ET interferometers give gamma(f -> 0) = -3/8.
@@ -95,6 +108,31 @@ This only downgrades that one diagnostic to a warning; no pinned version changes
   G mu over its median (our choice: the paper does not define it for a
   non-Gaussian posterior). The threshold is found by scanning 12 values of G mu
   from 1/100 to 2 times the Fisher threshold and interpolating in log-log.
+- Data case 2 (`scripts/table1_case2.py`): the data hold CS + CBC + CBHE, the
+  model only CS + CBC (paper Sec. IV B). The noise-free estimate (paper Eq. 26)
+  of the modelled amplitudes is shifted by (F_mm)^-1 F_mu Omega_CBHE
+  (`fisher.unmodelled_bias`); the MCMC then uses the CS + CBC block of the
+  covariance. Because the estimate is biased, Delta(G mu)/(G mu) is the total
+  error with respect to the injected value,
+  sqrt((median - truth)^2 + halfwidth^2) / truth, because the posterior width
+  alone is blind to bias; the case-3 measure is also printed.
+  G mu is scanned in 0.25 dex steps up to 1e-10, where the paper stops ("> 1e-10").
+- ET designs (`scripts/et_designs.py`): Branchesi et al. (arXiv:2303.15923) 2L at
+  Sardinia (40 31', 9 25') and Meuse-Rhine (50 43' 23", 5 55' 14"), 15 km arms;
+  Sardinia arms east/north, the Meuse-Rhine L rotated counter-clockwise by
+  alpha = 0 or 45 deg (their App. B). Noise: ET-0304B-22 (CoBA) LF+HF curves,
+  10 km for the triangle and 15 km for the 2L, as in Branchesi et al.
+- Correlated noise (`src/sgwb_snr/correlated.py`, `scripts/correlated_noise.py`):
+  Caporali et al. (arXiv:2501.09057) Eq. 11, CSD N_o = r N_d(2.75 Hz)
+  (f / 2.75 Hz)^-8 (body-wave Newtonian noise) between every pair of the
+  triangle, r in {-0.4, ..., 0.8}. The cross-spectra of all baselines get the
+  exact Gaussian covariance N_IK N_JL + N_IL N_JK, which reduces to the
+  paper's Eq. 25 for uncorrelated noise; two baselines sharing a detector are
+  then correlated at first order in N_o. "Modelled": r is a free amplitude
+  (tilt fixed) and the covariance includes N_o. "Unmodelled": the analyst uses
+  the uncorrelated covariance and no r, so the estimate is biased;
+  Delta(G mu)/(G mu) = sqrt(sigma^2 + bias^2) / (k Omega_CS), the Fisher form of
+  the data case 2 measure. Fisher only.
 
 ## Known differences from the paper
 
@@ -192,3 +230,95 @@ paper. They do not explain the w = 1 and 1/2 rows, where we remain 2-11x weaker.
 Remaining known differences: the ET noise and ORF (above), the paper's single
 noisy realization of Omega_hat, and the unstated definition of Delta(G mu)/(G mu)
 for a non-Gaussian posterior.
+
+Table I, data case 2 (CBHE not modelled), MCMC, error with respect to the truth
+/ paper (ratio):
+
+| w | CE4020 | ET | CE4020ET |
+|---|---|---|---|
+| 1 | 7.06e-16 / 6.3e-16 (1.1x) | 6.16e-16 / 2.0e-15 (0.31x) | 5.20e-16 / 5.6e-15 (0.093x) |
+| 1/2 | 2.16e-14 / 5.6e-14 (0.39x) | 1.11e-14 / 3.2e-14 (0.35x) | 7.80e-15 / 2.0e-14 (0.39x) |
+| 1/3 | 1.71e-13 / 5.6e-13 (0.31x) | 5.43e-14 / 2.0e-13 (0.27x) | 3.26e-14 / 5.0e-14 (0.65x) |
+| 1/4 | 9.16e-12 / > 1e-10 | 1.35e-12 / > 1e-10 | 6.75e-13 / > 1e-10 |
+
+The Fisher bias from the unmodelled CBHE explains the paper's qualitative
+finding: it is 0.6-0.7 sigma for CE4020 but 3-5 sigma for ET and CE4020ET. For
+w <= 1/2 it is negative (CBC absorbs the CBHE power and overshoots, and the
+anti-correlated CS amplitude is pulled down); for w = 1 it is positive (the CS
+tilt +1 lies between the CBC and CBHE tilts, so CS impersonates part of the
+CBHE). Relative to our data case 3, ignoring CBHE degrades ET and CE4020ET by
+1.6x (w = 1) to 6-7x (w = 1/4), and leaves CE4020 unchanged or slightly better
+(a two-component fit has a smaller error and its bias is small).
+
+The paper finds much larger degradations (13x to more than 700x) and no
+detection below 1e-10 at w = 1/4, which a noise-free Fisher bias does not
+produce: at G mu = 1e-12 the w = 1/4 CS amplitude, 1.4e-11 at 25 Hz, is
+already about 5x the ~3e-12 bias, and it keeps growing with G mu. The paper's single noisy realization (whose data case 1 already
+shows spurious CS amplitudes of 3.5e-13 to 1.1e-11, its Fig. 6) is the most
+likely source; we cannot test this without their simulated data. With the
+case-3 measure (posterior width over median) the positive w = 1 bias would make
+ET and CE4020ET look detectable already at G mu < 3e-17: the posterior then
+confidently measures leaked CBHE power, which is why we report the error with
+respect to the truth.
+
+## Extensions
+
+### ET triangle vs 2L
+
+1-sigma PI curves (`figures/pi_curves_et_designs.png`, 1 yr, 5-512 Hz): ET-D
+triangle 4.5e-13, CoBA 10 km triangle 7.9e-13, 2L-15km at alpha = 0 deg 2.8e-13,
+at 45 deg 3.2e-12 (minima, all near 8-9 Hz). As in Branchesi et al. (Fig. 27
+and Sec. 8.1.1), the parallel 2L is the most sensitive below 115 Hz and the
+triangle above; the 45-degree 2L is 10x worse than the parallel one at 10-50 Hz
+and comparable (1.4x) at 300 Hz. The best and worst orientations for stochastic
+searches are alpha = 2.51 and 47.51 deg (great-circle parallel and 45 deg
+from it), which we reproduce from the site coordinates alone.
+
+Data case 3, Fisher G mu at Delta(G mu)/(G mu) = 0.5 (ET-D columns as in Table I):
+
+| w | ET-D tri | CoBA tri 10 km | 2L 0 deg | 2L 45 deg | CE4020ET | CE4020 + CoBA tri | CE4020 + 2L 0 | CE4020 + 2L 45 |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 2.88e-16 | 3.06e-16 | 1.90e-16 | 1.73e-15 | 2.16e-16 | 2.54e-16 | 1.69e-16 | 5.08e-16 |
+| 1/2 | 3.03e-15 | 3.77e-15 | 1.41e-15 | 3.77e-14 | 1.94e-15 | 2.74e-15 | 1.19e-15 | 5.84e-15 |
+| 1/3 | 1.02e-14 | 1.57e-14 | 3.27e-15 | 3.49e-13 | 5.55e-15 | 9.80e-15 | 2.58e-15 | 2.46e-14 |
+| 1/4 | 1.65e-13 | 3.35e-13 | 3.20e-14 | 2.33e-11 | 7.17e-14 | 1.72e-13 | 2.32e-14 | 5.64e-13 |
+
+For cosmic strings the parallel 2L is the best ET design: against the CoBA
+triangle it improves the threshold by 1.6x (w = 1) to 10x (w = 1/4), alone, and
+by 1.5-7x with CE4020. The CS signal and its separation from the foregrounds
+are decided below ~30 Hz, where the parallel 2L is more sensitive; the
+improvement grows as w falls because the CS spectrum becomes redder. The
+45-degree 2L is the worst option, 9x (w = 1) to 730x (w = 1/4) worse than the
+parallel 2L alone; with CE4020 the loss shrinks to 3-24x.
+
+### Correlated Newtonian noise in the triangle
+
+Per unit r, N_o / N_d is 0.63 (ET-D) and 0.41 (CoBA 10 km) at 5 Hz and falls
+below 1e-2 above 10 Hz, so all of Caporali et al.'s r values keep the noise
+matrix positive definite. But in Omega units the correlated noise at 5 Hz is of
+order 1e-7, four orders of magnitude above the cosmic-string signal.
+
+Fisher G mu threshold, w = 1/3 (`scripts/correlated_noise.py` prints all w):
+
+| r | ET mod. | ET unmod. | CE4020ET mod. | CE4020ET unmod. | CoBA tri mod. | CE4020 + CoBA tri mod. |
+|---|---|---|---|---|---|---|
+| none (r = 0, not fitted) | 1.02e-14 | | 5.55e-15 | | 1.57e-14 | 9.80e-15 |
+| 0 | 2.21e-14 | 1.02e-14 | 1.03e-14 | 5.55e-15 | 2.90e-14 | 1.52e-14 |
+| +-0.2 | 2.11-2.31e-14 | > 1e-10 | 1.00-1.05e-14 | > 1e-10 | 2.85-2.96e-14 | 1.51-1.53e-14 |
+| +-0.4 | 2.04-2.42e-14 | > 1e-10 | 0.98-1.07e-14 | > 1e-10 | 2.80-3.02e-14 | 1.50-1.54e-14 |
+| 0.8 | 2.64e-14 | > 1e-10 | 1.09e-14 | > 1e-10 | 3.15e-14 | 1.56e-14 |
+
+- Unmodelled, any |r| >= 0.2 makes the CS background unmeasurable below
+  G mu = 1e-10 for w <= 1/3; at w = 1/2 the threshold moves from ~3e-15 to
+  2e-11 - >1e-10, and at w = 1 from ~3e-16 to 1e-13 - 1e-12. The bias is linear in r, so +r and -r
+  give the same threshold.
+- Modelled (one extra free amplitude, tilt -8), the cost is nearly independent
+  of r: 1.2x (w = 1), 1.5x (w = 1/2), 2x (w = 1/3) and 3.5x (w = 1/4) for ET
+  alone, 1.2-2.7x for CE4020ET. Most of it is the marginalization itself: the
+  correlated noise and the redder CS spectrum compete for the same 5-10 Hz.
+- With the noise modelled, the parallel 2L (no co-located pairs, so no such
+  noise) beats the CoBA triangle at w = 1/3 by 9x (alone) and 6x (with CE4020).
+
+Limits: power-law NN template with its tilt fixed and the same CSD for all
+three pairs (Caporali et al.); correlated magnetic (Schumann) noise, which
+would also couple the two 2L sites, is not included; Fisher only.

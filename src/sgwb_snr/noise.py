@@ -1,12 +1,15 @@
 """Detector noise power spectral densities (PSDs) from official sensitivity files.
 
-Files and provenance: data/noise_curves/SOURCES.md. All are one-sided strain
-ASDs; the one-sided PSD is ASD^2.
+Files and provenance: data/noise_curves/SOURCES.md. The CE and ET-D files hold
+one-sided strain ASDs (PSD = ASD^2); the ET-0304B-22 files (CoBA curves used by
+Branchesi et al., arXiv:2303.15923) hold one-sided PSDs, column 3 = LF+HF.
 
 ET-D: the ET-0000A-18 curve describes one low/high-frequency pair of
 interferometers with a 90-degree opening angle (Hild et al., arXiv:1012.0908,
 Sec. 6). The 60-degree triangle geometry is applied once, in the ORF
 (sin(beta_1) sin(beta_2) in orf.py), so it must NOT be applied here as well.
+The same holds for the CoBA curves: ET-0304B-22 states that each is the strain
+sensitivity of a single L-shaped interferometer.
 """
 
 from pathlib import Path
@@ -15,26 +18,30 @@ import numpy as np
 
 _NOISE_DIR = Path(__file__).resolve().parents[2] / "data" / "noise_curves"
 
-# detector name -> (file name, column holding the ASD)
-_ASD_FILES = {
-    "CE-40": ("cosmic_explorer_strain.txt", 1),
-    "CE-20": ("cosmic_explorer_20km_strain.txt", 1),
-    "ET-D": ("ET-0000A-18_ETDSensitivityCurveTxtFile.txt", 3),  # ET-D-sum
+# detector name -> (file name, column, what the column holds: "asd" or "psd")
+_NOISE_FILES = {
+    "CE-40": ("cosmic_explorer_strain.txt", 1, "asd"),
+    "CE-20": ("cosmic_explorer_20km_strain.txt", 1, "asd"),
+    "ET-D": ("ET-0000A-18_ETDSensitivityCurveTxtFile.txt", 3, "asd"),  # ET-D-sum
+    # ET-0304B-22 columns: f, HF, LF, LF+HF (checked: col 3 = 1/(1/HF + 1/LF)).
+    "ET-10km-CoBA": ("18213_ET10kmcolumns.txt", 3, "psd"),
+    "ET-15km-CoBA": ("18213_ET15kmcolumns.txt", 3, "psd"),
 }
 
 
 def load_asd(detector):
-    """Tabulated (frequencies_hz, asd_per_sqrt_hz) exactly as in the source file."""
-    if detector not in _ASD_FILES:
-        raise ValueError(f"No noise curve for '{detector}'. Available: {sorted(_ASD_FILES)}")
-    file_name, column = _ASD_FILES[detector]
+    """Tabulated (frequencies_hz, asd_per_sqrt_hz) from the source file (sqrt taken for PSD files)."""
+    if detector not in _NOISE_FILES:
+        raise ValueError(f"No noise curve for '{detector}'. Available: {sorted(_NOISE_FILES)}")
+    file_name, column, quantity = _NOISE_FILES[detector]
     table = np.loadtxt(_NOISE_DIR / file_name)
     assert table.ndim == 2 and table.shape[1] > column, f"unexpected table shape {table.shape}"
-    frequencies_hz, asd_per_sqrt_hz = table[:, 0], table[:, column]
+    frequencies_hz, values = table[:, 0], table[:, column]
     if np.any(np.diff(frequencies_hz) <= 0):
         raise ValueError(f"{file_name}: frequencies not strictly increasing")
-    if np.any(asd_per_sqrt_hz <= 0) or not np.all(np.isfinite(asd_per_sqrt_hz)):
-        raise ValueError(f"{file_name}: ASD must be finite and positive")
+    if np.any(values <= 0) or not np.all(np.isfinite(values)):
+        raise ValueError(f"{file_name}: {quantity.upper()} must be finite and positive")
+    asd_per_sqrt_hz = {"asd": values, "psd": np.sqrt(values)}[quantity]
     return frequencies_hz, asd_per_sqrt_hz
 
 

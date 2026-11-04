@@ -18,7 +18,24 @@ def test_et_d_sum_is_xylophone_combination():
     np.testing.assert_allclose(total, (lf**-2 + hf**-2) ** -0.5, rtol=1e-6)
 
 
-@pytest.mark.parametrize("detector", ["CE-40", "CE-20", "ET-D"])
+@pytest.mark.parametrize("file_name", ["18213_ET10kmcolumns.txt", "18213_ET15kmcolumns.txt"])
+def test_coba_column_3_is_xylophone_combination(file_name):
+    # ET-0304B-22: columns f, HF, LF, LF+HF, all PSDs. Independent noise in the two
+    # instruments gives PSD_sum^-1 = PSD_HF^-1 + PSD_LF^-1 (identifies the columns).
+    table = np.loadtxt(NOISE_DIR / file_name)
+    hf, lf, total = table[:, 1], table[:, 2], table[:, 3]
+    np.testing.assert_allclose(total, 1.0 / (1.0 / hf + 1.0 / lf), rtol=1e-6)
+    # HF is the high-frequency instrument: its PSD minimum lies above the LF one.
+    assert table[np.argmin(hf), 0] > 100.0 > table[np.argmin(lf), 0]
+
+
+def test_longer_coba_arms_are_more_sensitive():
+    # Arm length 10 -> 15 km lowers the strain noise in the bucket (ET-0304B-22, Fig. 1).
+    frequencies_hz = np.array([10.0, 30.0, 100.0, 300.0])
+    assert np.all(psd("ET-15km-CoBA", frequencies_hz) < psd("ET-10km-CoBA", frequencies_hz))
+
+
+@pytest.mark.parametrize("detector", ["CE-40", "CE-20", "ET-D", "ET-10km-CoBA", "ET-15km-CoBA"])
 def test_psd_on_tabulated_grid_is_asd_squared(detector):
     frequencies_hz, asd = load_asd(detector)
     np.testing.assert_allclose(psd(detector, frequencies_hz), asd**2, rtol=1e-12)

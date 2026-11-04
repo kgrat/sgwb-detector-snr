@@ -3,7 +3,13 @@
 import numpy as np
 import pytest
 
-from sgwb_snr.fisher import amplitude_covariance, detection_threshold, fisher_matrix, string_tension_uncertainty
+from sgwb_snr.fisher import (
+    amplitude_covariance,
+    detection_threshold,
+    fisher_matrix,
+    string_tension_uncertainty,
+    unmodelled_bias,
+)
 from sgwb_snr.networks import network_baselines
 from sgwb_snr.pi_curve import power_law_amplitudes
 from sgwb_snr.snr import hubble_constant_si, omega_eff
@@ -80,3 +86,23 @@ def test_detection_threshold_solves_target():
     assert string_tension_uncertainty(threshold, sigma, 1.0 / 3.0, 1.0, PARAMS) == pytest.approx(0.5, rel=1e-5)
     # On the plateau this is Omega_CS(f*) = 4 sigma.
     assert omega_cosmic_strings(F_STAR, threshold, 1.0 / 3.0, 1.0, PARAMS)[0] == pytest.approx(4.0 * sigma, rel=3e-3)
+
+
+def test_unmodelled_copy_of_a_modelled_shape_is_absorbed_exactly(ce4020):
+    # If the unmodelled component has the same shape as a modelled one, the ML
+    # estimate assigns all of its amplitude to that component and none to the others.
+    cbc_index = FOREGROUNDS["CBC"][1]
+    fisher = fisher_matrix(FREQS_HZ, ce4020, [0.0, cbc_index, cbc_index], YEAR_S, H0_PER_S)
+    bias = unmodelled_bias(fisher, 2, [3e-12])
+    np.testing.assert_allclose(bias, [0.0, 3e-12], atol=1e-9 * 3e-12)
+
+
+def test_data_case_2_bias_matches_paper_trend(ce4020):
+    # Paper Sec. V: omitting CBHE matters little for CE4020 but strongly for ET.
+    # With the Fisher bias this is |bias_CS| / sigma_CS < 1 for CE4020 and > 3 for ET.
+    def bias_over_sigma(baselines):
+        fisher = fisher_matrix(FREQS_HZ, baselines, DATA_CASE_3, YEAR_S, H0_PER_S)
+        bias = unmodelled_bias(fisher, 2, [FOREGROUNDS["CBHE"][0]])
+        return abs(bias[0]) / np.sqrt(amplitude_covariance(fisher[:2, :2])[0, 0])
+    assert bias_over_sigma(ce4020) < 1.0
+    assert bias_over_sigma(network_baselines("ET", FREQS_HZ)) > 3.0
