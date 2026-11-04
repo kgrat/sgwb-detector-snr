@@ -22,7 +22,7 @@ foregrounds.
 | 4 | SNR for an arbitrary Omega_GW(f) (Thrane & Romano 2013, Eq. 22) | Analytic constant-noise integral; T&R Eq. 26 for co-located detectors | Done |
 | 5 | Power-law integrated curves (Thrane & Romano 2013) | Flat spectrum on the PI curve gives SNR = 1; paper Fig. 1, right panel (CE4020 within 0.84-1.10; ET differs) | Done |
 | 6 | Cosmic-string, CBC, and hyperbolic-encounter spectra | Omega_CS proportional to sqrt(G mu) on the plateau; Figs. 2-3 (within 6%) | Done |
-| 7 | Fisher component separation | Table I, w = 1/3 row | To do |
+| 7 | Fisher component separation, cross-checked by MCMC with the paper's priors | Gaussian limit of the MCMC equals Fisher; Table I, w = 1/3 row (MCMC: ET 1.3x, CE4020 1.4x, CE4020ET 2.2x the paper's G mu) | Done |
 
 ## Setup
 
@@ -35,6 +35,8 @@ foregrounds.
     python scripts/plot_asd.py
     python scripts/plot_pi_curves.py
     python scripts/plot_spectra.py
+    python scripts/table1.py
+    python scripts/table1_mcmc.py   # ~1 h on one core
 
 Versions are pinned exactly. gwpy and matplotlib are pinned below their latest
 releases because newer versions break pygwb 1.5.1 (see comments in requirements.txt).
@@ -78,6 +80,21 @@ This only downgrades that one diagnostic to a warning; no pinned version changes
   (eps_r = 0.1 / (Gamma G mu)); see "Known differences". Non-standard
   cosmologies follow the paper's Eqs. 7-9 (pivot at f_rd, T_rd = 1 GeV), for
   1/9 < w <= 1. CBC and CBHE are the paper's power laws (Eqs. 12, 14).
+- Component separation: Fisher matrix of the three amplitudes (paper Eqs. 30-31,
+  continuum limit, same 2T normalization as the SNR), marginalized over the
+  foregrounds; Delta(G mu)/(G mu) = sigma_CS / (k Omega_CS(f*)) with
+  k = d ln Omega_CS / d ln(G mu) (k = 1/2 on the w = 1/3 plateau). This is the
+  Gaussian, prior-free limit of the paper's MCMC (Eq. 37).
+- MCMC cross-check (`src/sgwb_snr/mcmc.py`): the paper's Gaussian likelihood
+  (Eq. 37) in the three amplitudes, with the Fisher covariance and log-uniform
+  priors on G mu, Omega_CBC and Omega_CBHE in [1e-18, 1e-8] (paper Sec. V),
+  sampled with emcee. Omega_hat is the injected signal (a noise-free forecast);
+  the paper used one simulated noisy realization. Chains run until they are
+  longer than 50 autocorrelation times and tau has settled to 1%;
+  5 tau are discarded. Delta(G mu)/(G mu) is half the 16-84 percentile width of
+  G mu over its median (our choice: the paper does not define it for a
+  non-Gaussian posterior). The threshold is found by scanning 12 values of G mu
+  from 1/100 to 2 times the Fisher threshold and interpolating in log-log.
 
 ## Known differences from the paper
 
@@ -141,3 +158,37 @@ Sec. V), so we use it. The printed reading would weaken every G mu limit by
 1.93^2 = 3.7. With this choice our spectra match Fig. 2 to within 6%
 (G mu = 1e-10 curves within 1.5%; the paper's G mu = 1e-16 curves are ~4% higher
 than ours).
+
+Table I (data case 3: CS, CBC and CBHE all modelled), G mu at which
+Delta(G mu)/(G mu) = 0.5. Ours by Fisher and by MCMC (paper's priors) / paper
+(MCMC); the ratio is MCMC / paper:
+
+| w | CE4020 | ET | CE4020ET |
+|---|---|---|---|
+| 1 | 1.67e-15, 9.65e-16 / 2.2e-16 (4.4x) | 2.88e-16, 3.88e-16 / 6.3e-17 (6.2x) | 2.16e-16, 3.18e-16 / 2.8e-17 (11x) |
+| 1/2 | 3.75e-14, 2.40e-14 / 8.9e-15 (2.7x) | 3.03e-15, 5.41e-15 / 2.5e-15 (2.2x) | 1.94e-15, 3.23e-15 / 5.6e-16 (5.8x) |
+| 1/3 | 3.91e-13, 1.99e-13 / 1.4e-13 (1.4x) | 1.02e-14, 1.47e-14 / 1.1e-14 (1.3x) | 5.55e-15, 7.57e-15 / 3.5e-15 (2.2x) |
+| 1/4 | 3.20e-11, 1.24e-11 / 1.4e-11 (0.89x) | 1.65e-13, 2.16e-13 / 3.5e-13 (0.62x) | 7.17e-14, 9.31e-14 / 1.3e-13 (0.72x) |
+
+The ordering of networks and of w matches the paper. The CS-CBC amplitude
+correlation is about -0.98 in every network, and marginalizing over the
+foregrounds inflates sigma_CS by 5x (ET), 9.5x (CE4020) and up to 29x (w = 1),
+so the result is sensitive to how the degeneracy is handled.
+
+The priors move the thresholds in opposite directions depending on the network:
+
+- CE4020: MCMC is 1.6-2.6x lower than Fisher, i.e. closer to the paper. The
+  injected Omega_CBHE is only 0.44 sigma for CE4020, so the log-uniform prior
+  (which forbids negative amplitudes) cuts off half of the degenerate
+  direction that Fisher marginalizes over.
+- ET and CE4020ET: MCMC is 1.3-1.8x higher than Fisher. Here Omega_CBHE is
+  measured at about 4 sigma, so positivity does little; instead, at
+  Delta ~ 0.5 the posterior on G mu is skewed by the log-uniform prior toward
+  the 1e-18 floor, and half the 16-84% width over the median exceeds the
+  linear-propagation value.
+
+Including the priors brings the w = 1/3 and 1/4 rows within 0.6-2.2x of the
+paper. They do not explain the w = 1 and 1/2 rows, where we remain 2-11x weaker.
+Remaining known differences: the ET noise and ORF (above), the paper's single
+noisy realization of Omega_hat, and the unstated definition of Delta(G mu)/(G mu)
+for a non-Gaussian posterior.

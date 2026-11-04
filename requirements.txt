@@ -7,4 +7,5 @@ matplotlib==3.9.4  # 3.10+ breaks gwpy 3.0.8 axes
 bilby==2.8.2
 gwpy==3.0.8
 pygwb==1.5.1
+emcee==3.1.6  # imported directly by mcmc.py (also a bilby dependency)
 pytest==9.2.0

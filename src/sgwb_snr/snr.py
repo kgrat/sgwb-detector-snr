@@ -40,7 +40,7 @@ def baseline(detector_1, noise_1, detector_2, noise_2, frequencies_hz):
     )
 
 
-def _inverse_noise_sum(frequencies_hz, baselines):
+def inverse_noise_sum(frequencies_hz, baselines):
     """sum_{I<J} gamma_IJ^2 / (P_I P_J), the network's combined inverse noise."""
     frequencies_hz = np.asarray(frequencies_hz, dtype=float)
     assert frequencies_hz.ndim == 1, "frequencies_hz must be 1D"
@@ -64,7 +64,7 @@ def omega_eff(frequencies_hz, baselines, hubble_constant_per_s):
     S_eff = [sum Gamma^2 / (P_I P_J)]^(-1/2) = 5 [sum gamma^2 / (P_I P_J)]^(-1/2),
     Omega_eff = 2 pi^2 f^3 S_eff / (3 H0^2). Infinite where every gamma vanishes.
     """
-    inverse = _inverse_noise_sum(frequencies_hz, baselines)
+    inverse = inverse_noise_sum(frequencies_hz, baselines)
     strain_psd_eff = np.full_like(inverse, np.inf)
     np.divide(5.0, np.sqrt(inverse), out=strain_psd_eff, where=inverse > 0)
     return 2.0 * np.pi**2 * np.asarray(frequencies_hz) ** 3 * strain_psd_eff / (3.0 * hubble_constant_per_s**2)
@@ -81,7 +81,7 @@ def snr(frequencies_hz, omega_gw, baselines, observation_time_s, hubble_constant
     omega_gw = np.asarray(omega_gw, dtype=float)
     frequencies_hz = np.asarray(frequencies_hz, dtype=float)
     assert omega_gw.shape == frequencies_hz.shape, "omega_gw must match frequencies_hz"
-    inverse = _inverse_noise_sum(frequencies_hz, baselines)
+    inverse = inverse_noise_sum(frequencies_hz, baselines)
     prefactor = (3.0 * hubble_constant_per_s**2 / (10.0 * np.pi**2)) ** 2
     integrand = prefactor * omega_gw**2 * inverse / frequencies_hz**6
     return np.sqrt(2.0 * observation_time_s * trapezoid(integrand, frequencies_hz))
