@@ -6,7 +6,8 @@ interferometers with 90-degree arms. This is the convention pygwb uses and
 the one in arXiv:2502.12828 (their Eq. 1 with the 5/(8*pi) prefactor).
 
 The geometry itself (sky integral over antenna patterns) is computed by
-pygwb; this module only fixes inputs and enforces checks.
+pygwb; this module fixes inputs, corrects for non-90-degree arms (see
+tensor_orf) and enforces checks.
 """
 
 import bilby
@@ -63,8 +64,26 @@ def tensor_orf(detector_1, detector_2, frequencies_hz):
     )
     gamma = np.asarray(baseline.tensor_overlap_reduction_function, dtype=float)
 
+    # pygwb's tensor ORF (Nishizawa et al. 2009, arXiv:0903.0528, Eqs. 32-34)
+    # uses only each detector's position, plane and arm bisector, i.e. it
+    # treats every detector as L-shaped. With b the unit bisector and c the
+    # in-plane unit vector along x - y, arms at opening angle beta give
+    #   D = (x x - y y) / 2 = sin(beta) (b c + c b) / 2 = sin(beta) D_L,
+    # where D_L is the L-shaped detector with the same plane and bisector.
+    # The ORF is bilinear in D_1 and D_2, so the true ORF is
+    # sin(beta_1) sin(beta_2) times pygwb's (unchanged for 90-degree arms).
+    gamma = gamma * _arm_opening_sine(detector_1) * _arm_opening_sine(detector_2)
+
     assert gamma.shape == frequencies_hz.shape
     assert np.all(np.isfinite(gamma)), "non-finite ORF values"
-    # With this normalization |gamma| <= 1 for L-shaped 90-degree detectors.
+    # With this normalization |gamma| <= sin(beta_1) sin(beta_2) <= 1.
     assert np.all(np.abs(gamma) <= 1.0 + 1e-9), "|gamma| > 1: normalization error"
     return gamma
+
+
+def _arm_opening_sine(detector):
+    """sin(beta), with beta the angle between the detector's two arms."""
+    cos_beta = float(np.dot(detector.x, detector.y))
+    if not -1.0 < cos_beta < 1.0:
+        raise ValueError(f"Detector '{detector.name}' has parallel arms")
+    return np.sqrt(1.0 - cos_beta**2)
