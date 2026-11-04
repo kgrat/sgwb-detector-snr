@@ -21,7 +21,7 @@ foregrounds.
 | 3 | Detector ASDs (official CE-T2000017 and ET-0000A-18 files) | Paper Fig. 1, left panel (within 10% above 100 Hz; ET-D differs below ~60 Hz) | Done |
 | 4 | SNR for an arbitrary Omega_GW(f) (Thrane & Romano 2013, Eq. 22) | Analytic constant-noise integral; T&R Eq. 26 for co-located detectors | Done |
 | 5 | Power-law integrated curves (Thrane & Romano 2013) | Flat spectrum on the PI curve gives SNR = 1; paper Fig. 1, right panel (CE4020 within 0.84-1.10; ET differs) | Done |
-| 6 | Cosmic-string, CBC, and hyperbolic-encounter spectra | Omega_CS proportional to sqrt(G mu) on the plateau; Figs. 2-3 | To do |
+| 6 | Cosmic-string, CBC, and hyperbolic-encounter spectra | Omega_CS proportional to sqrt(G mu) on the plateau; Figs. 2-3 (within 6%) | Done |
 | 7 | Fisher component separation | Table I, w = 1/3 row | To do |
 
 ## Setup
@@ -34,6 +34,7 @@ foregrounds.
     python scripts/plot_orf_next_generation.py
     python scripts/plot_asd.py
     python scripts/plot_pi_curves.py
+    python scripts/plot_spectra.py
 
 Versions are pinned exactly. gwpy and matplotlib are pinned below their latest
 releases because newer versions break pygwb 1.5.1 (see comments in requirements.txt).
@@ -72,6 +73,11 @@ This only downgrades that one diagnostic to a warning; no pinned version changes
 - PI curves (Thrane & Romano Eqs. 29-30): 1 sigma, T = 1 yr, integrated over the
   paper's analysis band 5-512 Hz at 1/8 Hz, envelope over beta = -8 to 8 in
   steps of 0.01 (integer-only beta sags by up to 25% between tangent points).
+- Cosmic strings: the paper's Eqs. 3-6 (Sousa et al. 2020 template) with its
+  parameters, reading "alpha = 0.1" as loops born at l = 0.1 t
+  (eps_r = 0.1 / (Gamma G mu)); see "Known differences". Non-standard
+  cosmologies follow the paper's Eqs. 7-9 (pivot at f_rd, T_rd = 1 GeV), for
+  1/9 < w <= 1. CBC and CBHE are the paper's power laws (Eqs. 12, 14).
 
 ## Known differences from the paper
 
@@ -125,3 +131,13 @@ sensitive at low frequency, which follows from the ET-D noise difference above
 are only reproduced above ~300 Hz if the integration also extends to 2 kHz
 (CE4020 then within 0.82-1.09 everywhere), although the paper states a
 5-512 Hz analysis band; we keep 5-512 Hz.
+
+Cosmic-string amplitude. Evaluated as printed, the paper's Eq. 3
+(eps_r = alpha xi_r / (Gamma G mu), alpha = 0.1, xi_r = 0.271) gives a w = 1/3
+plateau of 5.14e-10 at G mu = 1e-10, but the paper's Figs. 2-3 show 9.92e-10.
+Loops born at l = 0.1 t (eps_r = 0.1 / (Gamma G mu)) give 9.87e-10, and this is
+the l = 0.1 t, F = 0.1 calibration behind the paper's A_r = 0.54 (Sousa et al.,
+Sec. V), so we use it. The printed reading would weaken every G mu limit by
+1.93^2 = 3.7. With this choice our spectra match Fig. 2 to within 6%
+(G mu = 1e-10 curves within 1.5%; the paper's G mu = 1e-16 curves are ~4% higher
+than ours).
