@@ -48,11 +48,15 @@ def psd(detector, frequencies_hz):
     frequencies_hz = np.asarray(frequencies_hz, dtype=float)
     assert frequencies_hz.ndim == 1, "frequencies_hz must be 1D"
     table_hz, table_asd = load_asd(detector)
-    if frequencies_hz.min() < table_hz[0] or frequencies_hz.max() > table_hz[-1]:
+    # Tolerate floating-point rounding of the tabulated end points (the CE files
+    # start at 5.000000000000000888 Hz), but never real extrapolation.
+    rounding = 1e-9
+    if frequencies_hz.min() < table_hz[0] * (1 - rounding) or frequencies_hz.max() > table_hz[-1] * (1 + rounding):
         raise ValueError(
             f"{detector} noise curve covers {table_hz[0]:g}-{table_hz[-1]:g} Hz; "
             f"requested {frequencies_hz.min():g}-{frequencies_hz.max():g} Hz"
         )
+    frequencies_hz = np.clip(frequencies_hz, table_hz[0], table_hz[-1])
     log_asd = np.interp(np.log(frequencies_hz), np.log(table_hz), np.log(table_asd))
     psd_per_hz = np.exp(2.0 * log_asd)
     assert psd_per_hz.shape == frequencies_hz.shape

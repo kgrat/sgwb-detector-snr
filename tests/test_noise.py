@@ -48,7 +48,14 @@ def test_matches_paper_figure_1_above_100_hz(detector, paper_asd):
 
 def test_no_extrapolation():
     with pytest.raises(ValueError):
-        psd("CE-40", np.array([4.0, 10.0]))  # CE files start at 5 Hz
+        psd("CE-40", np.array([4.99, 10.0]))  # CE files start at 5 Hz
+
+
+def test_band_edge_accepted():
+    # The CE files store 5 Hz as 5.000000000000000888; the paper's band starts
+    # at exactly 5 Hz, which must give the tabulated first value.
+    _, asd = load_asd("CE-40")
+    assert psd("CE-40", np.array([5.0]))[0] == pytest.approx(asd[0] ** 2, rel=1e-12)
 
 
 def test_unknown_detector_rejected():
