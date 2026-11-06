@@ -1,51 +1,101 @@
 # sgwb-detector-snr
 
-Python tools for computing the detectability (signal-to-noise ratio) of stochastic
-gravitational-wave backgrounds (SGWB) across ground-based detector networks:
-LIGO, Einstein Telescope (ET), and Cosmic Explorer (CE).
+Forecasts for detecting the stochastic gravitational-wave background (SGWB) from
+cosmic strings with next-generation ground-based detectors (Cosmic Explorer and
+the Einstein Telescope), in the presence of astrophysical foregrounds.
 
 Developed with Claude Code (Anthropic) as a coding assistant; all physical
 choices, conventions and validations were reviewed and decided by me.
 
-## Current goal
+## What this is
 
-Reproduce and extend Wang, Jin & Zhang, *Detecting SGWB from cosmic strings with
-next-generation detector networks* ([arXiv:2502.12828](https://arxiv.org/abs/2502.12828)):
-power-law integrated sensitivity curves for CE/ET networks, then Fisher-matrix
-component separation of a cosmic-string background from CBC and hyperbolic-encounter
-foregrounds.
+A from-scratch reproduction of Wang, Jin & Zhang, *Detecting SGWB from cosmic
+strings with next-generation detector networks*
+([arXiv:2502.12828](https://arxiv.org/abs/2502.12828)), followed by two
+extensions on the design of the Einstein Telescope. The pipeline goes from
+detector geometry and official noise curves, through overlap reduction functions
+and power-law integrated sensitivity curves, to separating the cosmic-string
+background from the compact-binary (CBC) and hyperbolic-encounter (CBHE)
+foregrounds with a Fisher matrix and an MCMC on the paper's likelihood. Every
+module is tested against a known physical result (99 tests; see
+[Validation](#validation)).
 
-## Status
+## Main results
 
-| Step | What | Validation target | Status |
-|---|---|---|---|
-| 1 | Tensor overlap reduction functions | H1-L1 gamma(0) = -0.89; co-located = 1 | Done |
-| 2 | CE-40 / CE-20 / ET-D geometry (Gupta et al., arXiv:2307.10421, Table II) | Paper Fig. 1, middle panel (CE matches; ET differs, see below) | Done |
-| 3 | Detector ASDs (official CE-T2000017 and ET-0000A-18 files) | Paper Fig. 1, left panel (within 10% above 100 Hz; ET-D differs below ~60 Hz) | Done |
-| 4 | SNR for an arbitrary Omega_GW(f) (Thrane & Romano 2013, Eq. 22) | Analytic constant-noise integral; T&R Eq. 26 for co-located detectors | Done |
-| 5 | Power-law integrated curves (Thrane & Romano 2013) | Flat spectrum on the PI curve gives SNR = 1; paper Fig. 1, right panel (CE4020 within 0.84-1.10; ET differs) | Done |
-| 6 | Cosmic-string, CBC, and hyperbolic-encounter spectra | Omega_CS proportional to sqrt(G mu) on the plateau; Figs. 2-3 (within 6%) | Done |
-| 7 | Fisher component separation, cross-checked by MCMC with the paper's priors | Gaussian limit of the MCMC equals Fisher; Table I, w = 1/3 row (MCMC: ET 1.3x, CE4020 1.4x, CE4020ET 2.2x the paper's G mu) | Done |
-| 8 | Data case 2: CBHE in the data but not in the model | Unmodelled copy of a modelled shape is absorbed exactly; paper Sec. V trend (weak for CE4020, strong for ET and CE4020ET) | Done |
-| 9 | Extension: ET triangle vs 2L (Branchesi et al., arXiv:2303.15923) | Parallel-arm angle 2.51 deg and gamma(f -> 0) = 0 at 47.51 deg; 2L-0 beats the triangle below ~100 Hz (we find 115 Hz) | Done |
-| 10 | Extension: correlated Newtonian noise in the ET triangle (Caporali et al., arXiv:2501.09057) | Uncorrelated limit equals the paper's Fisher matrix; Isserlis covariance; sign of the bias | Done (Fisher) |
+**1. Reproducing the paper's Table I.** The string tension G mu above which
+the background can be measured to 50% (Delta G mu / G mu < 0.5), for three
+networks and four equations of state w of the early universe:
 
-## Setup
+![Table I: this work vs the paper](figures/table1_comparison.png)
+
+With the paper's priors, our MCMC thresholds agree with the paper to within
+0.6-2.2x for w = 1/3 and 1/4, and keep its ordering of networks and of w. For
+w = 1 and 1/2 we are 2-11x less sensitive. The cosmic-string and CBC amplitudes
+are almost degenerate (correlation -0.98), which makes the thresholds sensitive
+to the paper's ET noise curve and geometry (which we could not reproduce from
+the sources it cites) and to its single noisy simulation; see
+[the detailed comparison](#detailed-comparison-with-the-paper). The priors
+matter in opposite directions: they tighten the CE-only result but loosen ET's.
+
+**2. Ignoring a foreground (the paper's data case 2).** Leaving the
+hyperbolic-encounter background out of the model biases the string amplitude by
+0.6-0.7 sigma for CE4020 but 3-5 sigma for ET and CE4020ET, reproducing the paper's
+qualitative finding. Thresholds degrade 1.6-7x for ET and CE4020ET (the paper
+finds 13x to over 700x; noise-free forecasts cannot produce that).
+
+**3. Extension: should ET be a triangle or two L-shaped detectors?** Using the
+geometry and official noise curves of the ET design study (Branchesi et al.,
+[arXiv:2303.15923](https://arxiv.org/abs/2303.15923)):
+
+![PI curves for ET designs](figures/pi_curves_et_designs.png)
+
+For cosmic strings, two parallel 15 km L-shaped detectors (Sardinia and
+Meuse-Rhine) beat the 10 km triangle by 1.6x (w = 1) to 10x (w = 1/4), because
+the measurement and the foreground separation happen below ~30 Hz, where the
+parallel pair is more sensitive. The same pair rotated by 45 degrees is the
+worst option, 9-730x worse than the parallel one.
+
+**4. Extension: correlated Newtonian noise in the triangle.** The triangle's
+co-located interferometers share seismic (Newtonian) noise, modelled as in
+Caporali et al. ([arXiv:2501.09057](https://arxiv.org/abs/2501.09057)). Left
+out of the analysis, a correlation of |r| >= 0.2 makes the w = 1/3 background
+unmeasurable below G mu = 1e-10: in energy-density units the correlated noise
+at 5 Hz is 2-3 orders of magnitude above the signal (3.6e-9 for r = 0.2,
+against ~1e-11 for the strings near threshold). Fitted as one extra parameter, it
+costs only 1.2-3.5x in G mu, but then the parallel L-shaped pair, which has no
+such correlation, is 9x better than the triangle at w = 1/3.
+
+## Limitations
+
+- Forecasts are noise-free (the expected data); the paper analysed one
+  simulated noisy realization, which is one reason our numbers differ.
+- The paper's ET noise curve and ET overlap reduction functions cannot be
+  reproduced from the sources it cites; we use the official ET-D curve and the
+  physically derived triangle geometry.
+- The cosmic-string amplitude follows the reading of the paper's Eq. 3 that
+  reproduces its Figs. 2-3 (loops born at l = 0.1 t); the literal reading would
+  weaken every limit by 3.7x.
+- How Delta G mu / G mu is read off a non-Gaussian posterior is not stated in
+  the paper; our definitions are given under [Methods](#methods-and-conventions).
+- The extensions are Fisher-matrix forecasts, use a power-law Newtonian-noise
+  template with fixed slope, and leave out correlated magnetic (Schumann) noise,
+  which would also couple two distant L-shaped detectors.
+
+## Quick start
 
     python3.12 -m venv .venv && source .venv/bin/activate
     pip install -r requirements.txt
     pip install -e .
-    pytest
-    python scripts/plot_orf_hl.py
-    python scripts/plot_orf_next_generation.py
-    python scripts/plot_asd.py
-    python scripts/plot_pi_curves.py
-    python scripts/plot_spectra.py
-    python scripts/table1.py
-    python scripts/table1_mcmc.py   # ~1 h on one core
-    python scripts/table1_case2.py  # ~1 h; one w per process: table1_case2.py 1/3
-    python scripts/et_designs.py
-    python scripts/correlated_noise.py
+    pytest                              # 99 tests, ~20 s
+    python scripts/table1.py            # Table I by Fisher, ~2 s
+    python scripts/plot_table1.py       # figure above
+    python scripts/et_designs.py        # triangle vs 2L, ~3 s
+    python scripts/correlated_noise.py  # correlated Newtonian noise, ~5 s
+    python scripts/table1_mcmc.py       # Table I by MCMC, ~1 h on one core
+    python scripts/table1_case2.py      # data case 2, ~1 h; or one w per process: table1_case2.py 1/3
+
+Figures for each step: `scripts/plot_orf_hl.py`, `plot_orf_next_generation.py`,
+`plot_asd.py`, `plot_pi_curves.py`, `plot_spectra.py` (output in `figures/`).
 
 Versions are pinned exactly. gwpy and matplotlib are pinned below their latest
 releases because newer versions break pygwb 1.5.1 (see comments in requirements.txt).
@@ -59,7 +109,38 @@ Recent Apple clang treats `-Wint-conversion` as an error and the build fails. If
 
 This only downgrades that one diagnostic to a warning; no pinned version changes.
 
-## Conventions
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `src/sgwb_snr/orf.py` | tensor overlap reduction functions (pygwb), with the 60-degree arm correction |
+| `src/sgwb_snr/detectors.py` | CE and ET geometry (Gupta et al. Table II), ET triangle, ET 2L |
+| `src/sgwb_snr/noise.py` | official noise curves, interpolation without extrapolation |
+| `src/sgwb_snr/snr.py`, `pi_curve.py` | network SNR and power-law integrated curves (Thrane & Romano 2013) |
+| `src/sgwb_snr/networks.py` | the paper's networks and the ET design-comparison networks |
+| `src/sgwb_snr/spectra.py` | cosmic-string, CBC and CBHE spectra |
+| `src/sgwb_snr/fisher.py`, `mcmc.py` | component separation: Fisher matrix, bias from unmodelled components, MCMC |
+| `src/sgwb_snr/correlated.py` | Fisher matrix with correlated noise between detectors |
+| `scripts/` | one script per table or figure |
+| `tests/` | validation against known physical results |
+| `data/noise_curves/` | official noise curves; provenance and checksums in `SOURCES.md` |
+
+## Validation
+
+| Component | Tested against |
+|---|---|
+| Overlap reduction functions | H1-L1 gamma(0) = -0.89; co-located detectors give 1 |
+| CE / ET geometry (Gupta et al., arXiv:2307.10421, Table II) | Paper Fig. 1, middle panel (CE matches; ET differs, see below) |
+| Noise curves (CE-T2000017, ET-0000A-18) | Paper Fig. 1, left panel (within 10% above 100 Hz; ET-D differs below ~60 Hz) |
+| SNR (Thrane & Romano 2013, Eq. 22) | Analytic constant-noise integral; T&R Eq. 26 for co-located detectors |
+| Power-law integrated curves | A flat spectrum on the curve has SNR = 1; paper Fig. 1, right panel (CE4020 within 0.84-1.10; ET differs) |
+| Cosmic-string, CBC and CBHE spectra | Omega_CS proportional to sqrt(G mu) on the radiation plateau; paper Figs. 2-3 (within 6%) |
+| Fisher separation and MCMC | MCMC equals Fisher in the Gaussian limit; Table I (figure above) |
+| Data case 2 | An unmodelled copy of a modelled shape is absorbed exactly; paper Sec. V trend |
+| ET 2L geometry (Branchesi et al.) | Parallel-arm offset 2.51 deg and gamma(f -> 0) = 0 at 47.51 deg; 2L beats the triangle below ~100 Hz (we find 115 Hz) |
+| Correlated noise | Uncorrelated limit equals the paper's Fisher matrix; Isserlis covariance; sign of the bias |
+
+## Methods and conventions
 
 - Frequencies in Hz throughout.
 - Tensor ORF normalized so co-located, co-aligned L-shaped detectors give gamma = 1.
@@ -134,7 +215,7 @@ This only downgrades that one diagnostic to a warning; no pinned version changes
   Delta(G mu)/(G mu) = sqrt(sigma^2 + bias^2) / (k Omega_CS), the Fisher form of
   the data case 2 measure. Fisher only.
 
-## Known differences from the paper
+## Detailed comparison with the paper
 
 Fig. 1 (middle) of arXiv:2502.12828, read off the figure at 1 Hz, compared with
 this code using Gupta et al. Table II geometry:
@@ -261,7 +342,7 @@ ET and CE4020ET look detectable already at G mu < 3e-17: the posterior then
 confidently measures leaked CBHE power, which is why we report the error with
 respect to the truth.
 
-## Extensions
+## Extensions in detail
 
 ### ET triangle vs 2L
 
@@ -295,8 +376,10 @@ parallel 2L alone; with CE4020 the loss shrinks to 3-24x.
 
 Per unit r, N_o / N_d is 0.63 (ET-D) and 0.41 (CoBA 10 km) at 5 Hz and falls
 below 1e-2 above 10 Hz, so all of Caporali et al.'s r values keep the noise
-matrix positive definite. But in Omega units the correlated noise at 5 Hz is of
-order 1e-7, four orders of magnitude above the cosmic-string signal.
+matrix positive definite. But expressed as an equivalent Omega_GW (N_o divided
+by the ET signal response, 3/8 x 3 H0^2 / (10 pi^2 f^3)), the correlated noise
+at 5 Hz is 1.8e-8 per unit r (3.6e-9 at r = 0.2; 1.1e-10 at 10 Hz), against
+Omega_CS ~ 1e-11 at 5 Hz for w = 1/3 near threshold: 2-3 orders of magnitude.
 
 Fisher G mu threshold, w = 1/3 (`scripts/correlated_noise.py` prints all w):
 
